@@ -1,14 +1,14 @@
 FROM pytorch/torchserve:latest-cpu
 
-RUN pip install --no-cache-dir transformers pillow numpy safetensors google-cloud-storage
+RUN pip install --no-cache-dir transformers pillow numpy safetensors
 
 WORKDIR /home/model-server
 
 COPY config.properties .
-COPY startup.sh .
+COPY handler.py .
+COPY model-store/ model-store/
 
 EXPOSE 8080 8081
 
-ENV MODEL_BUCKET=your-bucket-name
-
-CMD ["bash", "startup.sh"]
+# Start TorchServe normally
+CMD ["torchserve", "--start", "--model-store", "model-store", "--models", "clip.mar"]
