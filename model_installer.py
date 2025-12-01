@@ -23,7 +23,7 @@ processor.save_pretrained(MODEL_DIR)
 print("📦 Creating clip.mar file...")
 
 cmd = [
-    "torch-model-archiver",
+    "/home/nvupto/.local/bin/torch-model-archiver",
     "--model-name", "clip",
     "--version", "1.0",
     "--serialized-file", f"{MODEL_DIR}/model.safetensors",
