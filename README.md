@@ -1,7 +1,8 @@
 # 👗 Fashion CLIP Inference System  
-A fully containerized, production-ready image embedding & fashion recommendation service powered by **OpenAI CLIP**, **TorchServe**, **FastAPI**, **Streamlit**, and **Google Cloud Run**.
+A fully containerized, production-ready image embedding & fashion recommendation service powered by **OpenAI CLIP**, **TorchServe**, **FastAPI**, **Streamlit**, **Annoy (Spotify)**, and **Google Cloud Run**.
 
-This project provides an end-to-end pipeline for generating vector embeddings from fashion images using CLIP, wrapping them into an API, and serving them via a lightweight frontend. Everything is designed for cloud-native, scalable, serverless deployment.
+This project provides an end-to-end pipeline for generating vector embeddings from fashion images using CLIP, storing them in an approximate nearest neighbors index (Annoy), exposing them via an API, and serving results through a frontend UI.  
+The system is cloud-native, serverless, fully containerized, and ready for production-scale inference.
 
 ---
 
@@ -12,26 +13,40 @@ This project provides an end-to-end pipeline for generating vector embeddings fr
 - Automatically downloads and packages the model  
 - Generates a TorchServe-ready `.mar` file using safe serialization (`safetensors`)
 
+### 🧠 ANN Recommendations Using Annoy (Spotify)
+- Fast approximate nearest neighbor search  
+- Index rebuilt and persisted offline  
+- Real-time querying for image similarity  
+- Suitable for millions of vectors with minimal memory  
+- Cloud Run–friendly: runs purely in-memory without GPU requirements
+
 ### 🖥 FastAPI Backend
-- Wraps TorchServe predictions into a clean REST API  
-- Environment-configurable (local & Cloud Run)
+- Wraps TorchServe predictions  
+- Exposes `/predict` or `/recommend` endpoints  
+- Loads Annoy index for fast similarity search  
+- Returns nearest-neighbor items using CLIP embeddings
 
 ### 🎨 Streamlit Frontend
-- User uploads an image  
-- Calls the API to generate embeddings  
-- Fully Cloud Run–compatible  
+- Image upload  
+- API interaction  
+- Displays predicted embedding + recommended similar items  
+- Minimal, clean UI
 
 ### ☁ Cloud-Native Architecture
-- Each service runs independently on **Google Cloud Run**  
-- Auto-scalable serverless deployment  
-- Built via `gcloud builds submit`
+- Three independent Cloud Run services:
+  - `model-server` (TorchServe)
+  - `api` (FastAPI + Annoy index)
+  - `frontend` (Streamlit)
+- Fully serverless  
+- Auto-scalable  
+- Built with Cloud Build
 
 ### 🔧 Simple Model Installation
-A standalone script `model_installer.py` downloads the CLIP model, exports it as `clip.mar`, and saves it directly into:
+A standalone script `model_installer.py` downloads CLIP, packages it as `clip.mar`, and places it into:
 
 model-server/model-store/clip.mar
 
-No buckets, no gsutil, no startup scripts.
+This avoids buckets, gsutil, or any complex tooling.
 
 ---
 
@@ -39,8 +54,9 @@ No buckets, no gsutil, no startup scripts.
 
 fashion_CloudRun/
 │
-├── model_installer.py        # Downloads CLIP + creates .mar file
-├── install_model.ipynb       # Jupyter notebook alternative
+├── model_installer.py            # Downloads CLIP + creates .mar file
+├── build_annoy_index.py          # Builds Annoy similarity index
+├── install_model.ipynb           # Notebook alternative
 ├── README.md
 │
 ├── model-server/
@@ -53,12 +69,11 @@ fashion_CloudRun/
 ├── api/
 │   ├── Dockerfile
 │   ├── main.py
-│   └── ...
+│   ├── annoy_index.ann          
 │
 └── frontend/
     ├── Dockerfile
     ├── app.py
-    └── ...
 
 ---
 
@@ -74,53 +89,7 @@ python3 model_installer.py
 This generates:
 model-server/model-store/clip.mar
 
----
-
-## 🐳 Build Docker Images via Cloud Build
-
-### Build model server (TorchServe)
-gcloud builds submit model-server --tag gcr.io/$GOOGLE_CLOUD_PROJECT/model-server
-
-### Build API
-gcloud builds submit api --tag gcr.io/$GOOGLE_CLOUD_PROJECT/api
-
-### Build frontend
-gcloud builds submit frontend --tag gcr.io/$GOOGLE_CLOUD_PROJECT/frontend
-
----
-
-## ☁️ Deploy to Google Cloud Run
-
-### 1. Deploy TorchServe model server
-gcloud run deploy model-server \
-  --image gcr.io/$GOOGLE_CLOUD_PROJECT/model-server \
-  --memory=2Gi \
-  --concurrency=1 \
-  --allow-unauthenticated \
-  --region=europe-west3
-
-### 2. Deploy API
-gcloud run deploy api \
-  --image gcr.io/$GOOGLE_CLOUD_PROJECT/api \
-  --set-env-vars TORCHSERVE_URL=https://<model-server-url>/predictions/clip \
-  --allow-unauthenticated \
-  --region=europe-west3
-
-### 3. Deploy frontend
-gcloud run deploy frontend \
-  --image gcr.io/$GOOGLE_CLOUD_PROJECT/frontend \
-  --set-env-vars API_URL=https://<api-url> \
-  --allow-unauthenticated \
-  --region=europe-west3
-
----
-
-## 🌐 Environment Variables
-
-Each component supports a `.env` file:
-
-TORCHSERVE_URL=https://model-server-xxxxx.run.app/predictions/clip
-API_URL=https://api-xxxxx.run.app
+## 3. Use your Cloud Run to run the project
 
 ---
 
@@ -128,17 +97,18 @@ API_URL=https://api-xxxxx.run.app
 
 1. User uploads an image via Streamlit  
 2. Frontend sends the image to FastAPI  
-3. FastAPI forwards the request to TorchServe  
-4. TorchServe runs CLIP ViT-B/32 and returns embeddings  
-5. Frontend displays results  
+3. FastAPI calls TorchServe to compute CLIP embedding  
+4. Annoy index returns similar items instantly  
+5. Results displayed to the user  
 
 ---
 
-## 🧪 Testing the model server manually
+## 🧠 Annoy Recommendation Engine Details
 
-curl -X POST \
-  -F "data=@test.jpg" \
-  https://model-server-xxxxx.run.app/predictions/clip
+- Uses cosine similarity on CLIP embeddings  
+- Persistent `.ann` index file    
+- Loads extremely fast on Cloud Run (few MB)  
+- Ideal for serverless inference scenarios
 
 ---
 
@@ -152,8 +122,7 @@ Concurrency    | **1**
 Min Instances  | 0 or 1     
 Max Instances  | 1–3        
 
-TorchServe + CLIP requires >600 MB RAM.  
-Cloud Run default 512 MiB will fail.
+TorchServe + CLIP requires >600 MB RAM, so Cloud Run default 512 MiB will fail.
 
 ---
 
@@ -163,6 +132,7 @@ Cloud Run default 512 MiB will fail.
 - TorchServe  
 - FastAPI  
 - Streamlit  
+- Annoy (Spotify) for recommendations  
 - Docker / Cloud Build  
 - Google Cloud Run  
 
@@ -170,4 +140,4 @@ Cloud Run default 512 MiB will fail.
 
 ## 🙌 About
 
-This project demonstrates a complete cloud-native ML inference pipeline, including model packaging, scalable architecture, REST API serving, and frontend integration. Designed as a portfolio-grade example of deploying modern ML models in production.
+This project demonstrates a fully cloud-native ML inference pipeline, combining CLIP embeddings with an efficient approximate nearest neighbor search system (Annoy) to build real-time image similarity recommendations.  
