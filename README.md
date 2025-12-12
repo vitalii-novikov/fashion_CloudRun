@@ -48,35 +48,6 @@ model-server/model-store/clip.mar
 
 This avoids buckets, gsutil, or any complex tooling.
 
----
-
-## 🏗 Project Structure
-
-fashion_CloudRun/  
-│  
-├── model_installer.py            # Downloads CLIP + creates .mar file  
-├── build_annoy_index.py          # Builds Annoy similarity index  
-├── install_model.ipynb           # Notebook alternative  
-├── README.md  
-│  
-├── model-server/  
-│   ├── Dockerfile  
-│   ├── handler.py  
-│   ├── config.properties  
-│   └── model-store/  
-│       └── clip.mar  
-│  
-├── api/  
-│   ├── Dockerfile  
-│   ├── main.py  
-│   ├── annoy_index.ann            
-│  
-└── frontend/  
-    ├── Dockerfile  
-    ├── app.py  
-  
----  
-
 ## 🔧 Local Setup
 
 ### 1. Clone the repository
